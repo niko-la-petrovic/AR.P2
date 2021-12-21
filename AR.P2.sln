@@ -3,9 +3,11 @@ Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 16
 VisualStudioVersion = 16.0.31911.196
 MinimumVisualStudioVersion = 10.0.40219.1
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AR.P2.Worker", "AR.P2.Worker\AR.P2.Worker.csproj", "{DE115996-FA31-42A9-8FCA-BD210B227ED0}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "AR.P2.Worker", "AR.P2.Worker\AR.P2.Worker.csproj", "{DE115996-FA31-42A9-8FCA-BD210B227ED0}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AR.P2.Manager", "AR.P2.Manager\AR.P2.Manager.csproj", "{D66967F3-81B2-45D2-8E07-CF4F17D07ACD}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "AR.P2.Manager", "AR.P2.Manager\AR.P2.Manager.csproj", "{D66967F3-81B2-45D2-8E07-CF4F17D07ACD}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AR.P2.FileCreator", "AR.P2.FileCreator\AR.P2.FileCreator.csproj", "{7B8195BF-C170-4159-BFB5-48BFC56BC97E}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -21,6 +23,10 @@ Global
 		{D66967F3-81B2-45D2-8E07-CF4F17D07ACD}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{D66967F3-81B2-45D2-8E07-CF4F17D07ACD}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{D66967F3-81B2-45D2-8E07-CF4F17D07ACD}.Release|Any CPU.Build.0 = Release|Any CPU
+		{7B8195BF-C170-4159-BFB5-48BFC56BC97E}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{7B8195BF-C170-4159-BFB5-48BFC56BC97E}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{7B8195BF-C170-4159-BFB5-48BFC56BC97E}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{7B8195BF-C170-4159-BFB5-48BFC56BC97E}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
