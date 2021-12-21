@@ -1,13 +1,11 @@
+using AR.P2.Manager.Configuration;
+using AR.P2.Manager.Configuration.Settings;
+using AR.P2.Manager.Configuration.Swagger;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
-using Microsoft.AspNetCore.HttpsPolicy;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Threading.Tasks;
 
 namespace AR.P2.Manager
 {
@@ -16,18 +14,31 @@ namespace AR.P2.Manager
         public Startup(IConfiguration configuration)
         {
             Configuration = configuration;
+            System.Console.WriteLine((configuration as IConfigurationRoot).GetDebugView());
         }
 
         public IConfiguration Configuration { get; }
 
-        // This method gets called by the runtime. Use this method to add services to the container.
         public void ConfigureServices(IServiceCollection services)
         {
             services.AddRazorPages();
+            services.AddMvc();
+            services.AddControllers();
+
+            services.AddDbServices(Configuration);
+            services.AddFileUploadServices(Configuration);
+
+            services.AddSwaggerGen(options =>
+            {
+                //Configuration.GetSection(SwaggerSettings.SectionName).Get< SwaggerDocSettings>    
+                options.SwaggerDoc(SwaggerSettings.DocumentName, new Microsoft.OpenApi.Models.OpenApiInfo { Title = "test" });
+            });
         }
 
-        // This method gets called by the runtime. Use this method to configure the HTTP request pipeline.
-        public void Configure(IApplicationBuilder app, IWebHostEnvironment env)
+        public void Configure(
+            IApplicationBuilder app,
+            IWebHostEnvironment env,
+            FileUploadSettings fileUploadSettings)
         {
             if (env.IsDevelopment())
             {
@@ -42,14 +53,25 @@ namespace AR.P2.Manager
 
             app.UseHttpsRedirection();
             app.UseStaticFiles();
+            app.UseFileUpload(env, fileUploadSettings);
+
+            app.UseStaticFiles();
 
             app.UseRouting();
 
             app.UseAuthorization();
 
+            app.UseSwagger();
+            app.UseSwaggerUI(options =>
+            {
+                options.SwaggerEndpoint($"{SwaggerSettings.DocumentName}/swagger.json", SwaggerSettings.DocumentName);
+            });
+
             app.UseEndpoints(endpoints =>
             {
                 endpoints.MapRazorPages();
+                endpoints.MapControllers();
+                endpoints.MapSwagger();
             });
         }
     }

@@ -19,12 +19,13 @@
     "AR.P2.Manager": {
       "commandName": "Project",
       "launchBrowser": true,
+      "launchUrl": "https://localhost:7001/swagger",
       "environmentVariables": {
         "ASPNETCORE_ENVIRONMENT": "Development",
         "ASPNETCORE_HOSTINGSTARTUPASSEMBLIES": "Microsoft.AspNetCore.Mvc.Razor.RuntimeCompilation"
       },
       "dotnetRunMessages": "true",
-      "applicationUrl": "https://localhost:5001;http://localhost:5000"
+      "applicationUrl": "https://localhost:7001;http://localhost:7000"
     },
     "Docker": {
       "commandName": "Docker",
