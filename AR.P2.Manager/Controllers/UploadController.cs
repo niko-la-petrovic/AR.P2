@@ -40,6 +40,7 @@ namespace AR.P2.Manager.Controllers
             using var binIn = new BinaryReader(buffIn);
 
             int windowSize = uploadJobDto.WindowSize;
+            double samplingRate = uploadJobDto.SamplingRate;
             int totalSignalCount = (int)(fs.Length / sizeof(double));
             int signalCount = totalSignalCount / windowSize * windowSize;
 
@@ -49,18 +50,49 @@ namespace AR.P2.Manager.Controllers
             switch (uploadJobDto.ProcessingType)
             {
                 case Models.ProcessingType.Sequential:
-                    fftResults = BasicProcessing(uploadJobDto, binIn, windowSize, signalCount);
+                    fftResults = SequentialProcessing(binIn, windowSize, signalCount, samplingRate);
                     break;
                 case Models.ProcessingType.Parallel:
-                    fftResults = await ParallelProcessing(uploadJobDto, binIn, windowSize, signalCount);
+                    fftResults = await ParallelProcessing(binIn, windowSize, signalCount, samplingRate);
                     break;
                 case Models.ProcessingType.Simd:
+                    fftResults = SimdProcessing(uploadJobDto, binIn, windowSize, signalCount, samplingRate);
                     break;
                 case Models.ProcessingType.SimdParallel:
                     break;
+                default:
+                    throw new NotSupportedException(uploadJobDto.ProcessingType.ToString());
             }
 
             return Ok(fileUploadResults);
+        }
+
+        //
+
+        private List<FftResult> SimdProcessing(
+            UploadJobDto uploadJobDto,
+            BinaryReader binIn,
+            int windowSize,
+            int signalCount,
+            double samplingRate)
+        {
+            List<FftResult> fftResults = new();
+            var signal = ReadInSignal(binIn, signalCount);
+
+            unsafe
+            {
+                fixed (double* signalPtr = signal)
+                {
+                    SimdInner(signalPtr, windowSize, samplingRate, signalCount, fftResults);
+                }
+            }
+
+            throw new NotImplementedException();
+        }
+
+        private unsafe void SimdInner(double* signalPtr, int windowSize, double samplingRate, int signalCount, object fftResults)
+        {
+            throw new NotImplementedException();
         }
 
         public struct SubTaskInfo
@@ -92,10 +124,13 @@ namespace AR.P2.Manager.Controllers
             }
         }
 
-        private async static Task<List<FftResult>> ParallelProcessing(UploadJobDto uploadJobDto, BinaryReader binIn, int windowSize, int signalCount)
+        private static Task<List<FftResult>> ParallelProcessing(
+            BinaryReader binIn,
+            int windowSize,
+            int signalCount,
+            double samplingRate)
         {
             var cpuCount = Environment.ProcessorCount;
-            var samplingRate = uploadJobDto.SamplingRate;
 
             var parallelSignalCount = signalCount / cpuCount / windowSize * cpuCount * windowSize;
             var parallelTaskCount = parallelSignalCount / cpuCount;
@@ -105,13 +140,8 @@ namespace AR.P2.Manager.Controllers
             var processingTasks = new Task<List<KeyValuePair<SubTaskInfo, FftResult>>>[cpuCount];
             for (int i = 0; i < cpuCount; i++)
             {
-                var signal = new double[parallelTaskCount];
                 // TODO optimize - maybe by reading an entire block and doing block copy or reinterpreting the byte array pointer as a double array pointer
-                for (int j = 0; j < parallelTaskCount; j++)
-                {
-                    double d = binIn.ReadDouble();
-                    signal[j] = d;
-                }
+                var signal = ReadInSignal(binIn, parallelTaskCount);
 
                 int taskIndex = i;
                 processingTasks[i] = Task.Factory.StartNew(() => ParallelInner(taskIndex, signal, windowSize, parallelTaskCount, samplingRate));
@@ -124,18 +154,13 @@ namespace AR.P2.Manager.Controllers
 
             if (seqSignalCount > 0)
             {
-                var signal = new double[seqSignalCount];
-                for (int i = 0; i < seqSignalCount; i++)
-                {
-                    double d = binIn.ReadDouble();
-                    signal[i] = d;
-                }
+                var signal = ReadInSignal(binIn, seqSignalCount);
 
                 unsafe
                 {
                     fixed (double* signalPtr = signal)
                     {
-                        SequentialInner(signalPtr, uploadJobDto, windowSize, seqSignalCount, seqResults);
+                        SequentialInner(signalPtr, windowSize, samplingRate, seqSignalCount, seqResults);
                     }
                 }
             }
@@ -148,7 +173,21 @@ namespace AR.P2.Manager.Controllers
                 }
             }
 
-            return dict.Values.Concat(seqResults).ToList();
+            var result = dict.Values.Concat(seqResults).ToList();
+
+            return Task.FromResult(result);
+        }
+
+        private static double[] ReadInSignal(BinaryReader binIn, int sampleNumber)
+        {
+            var signal = new double[sampleNumber];
+            for (int i = 0; i < sampleNumber; i++)
+            {
+                double d = binIn.ReadDouble();
+                signal[i] = d;
+            }
+
+            return signal;
         }
 
         private static List<KeyValuePair<SubTaskInfo, FftResult>> ParallelInner(
@@ -180,36 +219,40 @@ namespace AR.P2.Manager.Controllers
             return kvps;
         }
 
-        private static List<FftResult> BasicProcessing(UploadJobDto uploadJobDto, BinaryReader binIn, int windowSize, int signalCount)
+        private static List<FftResult> SequentialProcessing(
+            BinaryReader binIn,
+            int windowSize,
+            int signalCount,
+            double samplingRate)
         {
             List<FftResult> fftResults = new();
 
-            var signal = new double[signalCount];
-            for (int i = 0; i < signalCount; i++)
-            {
-                double d = binIn.ReadDouble();
-                signal[i] = d;
-            }
+            var signal = ReadInSignal(binIn, signalCount);
 
             unsafe
             {
                 fixed (double* signalPtr = signal)
                 {
-                    SequentialInner(signalPtr, uploadJobDto, windowSize, signalCount, fftResults);
+                    SequentialInner(signalPtr, windowSize, samplingRate, signalCount, fftResults);
                 }
             }
 
             return fftResults;
         }
 
-        private static unsafe void SequentialInner(double* signalPtr, UploadJobDto uploadJobDto, int windowSize, int signalCount, List<FftResult> fftResults)
+        private static unsafe void SequentialInner(
+            double* signalPtr,
+            int windowSize,
+            double samplingRate,
+            int signalCount,
+            List<FftResult> fftResults)
         {
             for (int i = 0; i + windowSize <= signalCount; i += windowSize)
             {
                 using var fftDurationTimer = FftDuration.NewTimer();
 
                 var complexSpecComps = Operations.FftRecurse(signalPtr + i, windowSize);
-                var fftResult = Operations.GetFftResult(complexSpecComps, uploadJobDto.SamplingRate, uploadJobDto.WindowSize);
+                var fftResult = Operations.GetFftResult(complexSpecComps, samplingRate, windowSize);
                 fftResults.Add(fftResult);
             }
         }
