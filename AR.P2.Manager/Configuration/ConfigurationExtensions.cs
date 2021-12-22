@@ -3,11 +3,13 @@ using AR.P2.Manager.Data;
 using AR.P2.Manager.Services;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
+using Microsoft.AspNetCore.Routing;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.FileProviders;
-using System;
+using Microsoft.Extensions.Options;
+using Prometheus;
 using System.IO;
 
 namespace AR.P2.Manager.Configuration
@@ -33,6 +35,31 @@ namespace AR.P2.Manager.Configuration
             return services;
         }
 
+        public static IServiceCollection AddMetrics(this IServiceCollection services)
+        {
+            services.AddHttpClient(Options.DefaultName)
+                .UseHttpClientMetrics();
+
+            services.AddHealthChecks();
+
+            return services;
+        }
+
+        public static IEndpointRouteBuilder MapPrometheusMetrics(this IEndpointRouteBuilder endpoints)
+        {
+            endpoints.MapMetrics();
+            endpoints.MapHealthChecks("/health");
+
+            return endpoints;
+        }
+
+        public static IApplicationBuilder UseMetrics(this IApplicationBuilder app)
+        {
+            app.UseHttpMetrics();
+
+            return app;
+        }
+
         public static IApplicationBuilder UseFileUpload(this IApplicationBuilder app, IWebHostEnvironment env, FileUploadSettings fileUploadSettings)
         {
             string fileUploadDirectoryPath = fileUploadSettings.UseWebRoot ?
@@ -44,7 +71,8 @@ namespace AR.P2.Manager.Configuration
             StaticFileOptions fileUploadOptions = new StaticFileOptions
             {
                 FileProvider = fileProvider,
-                RequestPath = fileUploadSettings.FileUploadRequestPath
+                RequestPath = fileUploadSettings.FileUploadRequestPath,
+                ServeUnknownFileTypes = true
             };
 
             app.UseStaticFiles(fileUploadOptions);

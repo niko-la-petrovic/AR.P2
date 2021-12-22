@@ -1,0 +1,9 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+scrape_configs:
+  - job_name: "manager"
+    scrape_interval: 2s
+    static_configs:
+      - targets: ["manager:80"]

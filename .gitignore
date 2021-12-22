@@ -361,4 +361,8 @@ MigrationBackup/
 
 # Fody - auto-generated XML schema
 FodyWeavers.xsd
+
+#Custom
 /AR.P2.Manager/wwwroot/upload
+*.db
+/.idea/.idea.AR.P2/.idea

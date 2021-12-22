@@ -1,11 +1,15 @@
 using AR.P2.Manager.Configuration;
 using AR.P2.Manager.Configuration.Settings;
 using AR.P2.Manager.Configuration.Swagger;
+using AR.P2.Manager.Data;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
+using Microsoft.AspNetCore.Http.Features;
+using Microsoft.AspNetCore.Server.Kestrel.Core;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Np.AspNetCore.Authorization.OpenApi.Swagger.Configuration;
 
 namespace AR.P2.Manager
 {
@@ -26,19 +30,32 @@ namespace AR.P2.Manager
             services.AddControllers();
 
             services.AddDbServices(Configuration);
+            services.AddMetrics();
             services.AddFileUploadServices(Configuration);
 
             services.AddSwaggerGen(options =>
             {
-                //Configuration.GetSection(SwaggerSettings.SectionName).Get< SwaggerDocSettings>    
-                options.SwaggerDoc(SwaggerSettings.DocumentName, new Microsoft.OpenApi.Models.OpenApiInfo { Title = "test" });
+                var swaggerDocSettings = Configuration.GetSection(SwaggerSettings.SectionName).Get<SwaggerDocSettings>();
+
+                options.SwaggerDoc(SwaggerSettings.DocumentName, swaggerDocSettings.OpenApiInfo);
+            });
+
+            long maxUploadBytes = (long)(4 * System.Math.Pow(10, 9));
+            services.Configure<KestrelServerOptions>(options =>
+            {
+                options.Limits.MaxRequestBodySize = maxUploadBytes;
+            });
+            services.Configure<FormOptions>(options =>
+            {
+                options.MultipartBodyLengthLimit = maxUploadBytes;
             });
         }
 
         public void Configure(
             IApplicationBuilder app,
             IWebHostEnvironment env,
-            FileUploadSettings fileUploadSettings)
+            FileUploadSettings fileUploadSettings,
+            ApplicationDbContext dbContext)
         {
             if (env.IsDevelopment())
             {
@@ -55,9 +72,13 @@ namespace AR.P2.Manager
             app.UseStaticFiles();
             app.UseFileUpload(env, fileUploadSettings);
 
+            dbContext.Database.EnsureCreated();
+
             app.UseStaticFiles();
 
             app.UseRouting();
+
+            app.UseMetrics();
 
             app.UseAuthorization();
 
@@ -72,6 +93,7 @@ namespace AR.P2.Manager
                 endpoints.MapRazorPages();
                 endpoints.MapControllers();
                 endpoints.MapSwagger();
+                endpoints.MapPrometheusMetrics();
             });
         }
     }

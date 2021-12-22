@@ -3,7 +3,7 @@
     public class UploadJobDto
     {
         public string Name { get; set; }
-        public int SamplingRate { get; set; }
-        public int WindowSize { get; set; }
+        public int SamplingRate { get; set; } = 44100;
+        public int WindowSize { get; set; } = 4096;
     }
 }

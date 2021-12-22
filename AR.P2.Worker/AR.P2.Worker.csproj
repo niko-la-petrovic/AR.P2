@@ -18,4 +18,8 @@
     <Folder Include="Configuration\" />
   </ItemGroup>
 
+  <ItemGroup>
+    <ProjectReference Include="..\AR.P2.Algo\AR.P2.Algo.csproj" />
+  </ItemGroup>
+
 </Project>

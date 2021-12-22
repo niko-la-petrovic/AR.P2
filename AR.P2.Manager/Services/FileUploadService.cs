@@ -1,5 +1,6 @@
 ﻿using AR.P2.Manager.Configuration.Settings;
 using AR.P2.Manager.Data;
+using AR.P2.Manager.Models;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Configuration;
@@ -28,33 +29,45 @@ namespace AR.P2.Manager.Services
             _webRootPath = env.WebRootPath;
         }
 
-        public async Task<IEnumerable<string>> UploadFiles(IEnumerable<IFormFile> formFiles)
+        public async Task<IEnumerable<FileUploadResult>> UploadFiles(IEnumerable<IFormFile> formFiles)
         {
-            var outputFilePaths = await Task.WhenAll(formFiles.Select(formFile => UploadFile(formFile)));
+            var fileUploadResults = await Task.WhenAll(formFiles.Select(formFile => UploadFile(formFile)));
 
-            return outputFilePaths.ToList();
+            return fileUploadResults.ToList();
         }
 
-        public async Task<string> UploadFile(IFormFile formFile)
+        public async Task<FileUploadResult> UploadFile(IFormFile formFile)
         {
-            string destinationFilePath = GetDestinationFilePath(formFile);
+            string destinationFileName = GetSanitizedFileName(formFile.FileName);
+            string destinationFilePath = GetDestinationFilePath(destinationFileName);
             using var destStream = File.OpenWrite(destinationFilePath);
 
             await formFile.CopyToAsync(destStream);
 
-            return destinationFilePath;
+            string requestPath = string.Join("/", _fileUploadSettings.FileUploadRequestPath, destinationFileName);
+
+            return new FileUploadResult
+            {
+                LocalPath = destinationFilePath,
+                RequestPath = requestPath
+            };
         }
 
-        public string GetDestinationFilePath(IFormFile formFile)
+        public string GetSanitizedFileName(string fileName)
         {
             var invalidChars = Path.GetInvalidFileNameChars();
-            var sanitizedFileName = string.Join("_", formFile.FileName.Split(invalidChars, StringSplitOptions.RemoveEmptyEntries)).TrimEnd('.');
-            var timestampedFileName =  Guid.NewGuid().ToString() + $"_{sanitizedFileName}";
+            var sanitizedFileName = string.Join("_", fileName.Split(invalidChars, StringSplitOptions.RemoveEmptyEntries)).TrimEnd('.');
+            var timestampedFileName = Guid.NewGuid().ToString() + $"_{sanitizedFileName}";
 
+            return timestampedFileName;
+        }
+
+        protected string GetDestinationFilePath(string fileName)
+        {
             if (_fileUploadSettings.UseWebRoot)
-                return Path.Join(_webRootPath, _fileUploadSettings.FileUploadDirectoryPath, timestampedFileName);
+                return Path.Join(_webRootPath, _fileUploadSettings.FileUploadDirectoryPath, fileName);
 
-            return Path.Join(_fileUploadSettings.FileUploadDirectoryPath, timestampedFileName);
+            return Path.Join(_fileUploadSettings.FileUploadDirectoryPath, fileName);
         }
     }
 }
