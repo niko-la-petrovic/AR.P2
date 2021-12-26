@@ -8,7 +8,7 @@ namespace AR.P2.Algo
     {
         public double SamplingRate { get; set; }
         public int WindowSize { get; set; }
-        public IEnumerable<SpectralComponent> SpectralComponents { get; set; }
+        public List<SpectralComponent> SpectralComponents { get; set; }
 
         public override string ToString()
         {

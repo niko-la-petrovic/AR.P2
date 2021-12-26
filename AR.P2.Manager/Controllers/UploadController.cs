@@ -1,5 +1,6 @@
 ﻿using AR.P2.Algo;
 using AR.P2.Manager.Dtos;
+using AR.P2.Manager.Models;
 using AR.P2.Manager.Services;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
@@ -20,8 +21,10 @@ namespace AR.P2.Manager.Controllers
         // TODO think of what to od with processing results - maybe export to csv or some binary form for each subtask?
         // TODO adjust buckets for nano-millisecond range
         // TODO add logging
+        // TODO exception handling
         private static readonly Histogram FftDuration = Metrics.CreateHistogram("mgr_fft_duration_seconds", "Histogram of FFT durations.");
         private static readonly Histogram FileProcessingDuration = Metrics.CreateHistogram("mgr_file_processing_duration_seconds", "Histogram of file processing durations.");
+        private static readonly Histogram RequestProcessingDuration = Metrics.CreateHistogram("mgr_request_processing_duration_seconds", "Histogram of request processing durations.");
 
         [HttpPost]
         public async Task<IActionResult> PostUploadJobAsync(
@@ -32,17 +35,51 @@ namespace AR.P2.Manager.Controllers
             if (!files.Any())
                 return BadRequest("No files provided.");
 
-            int windowSize = uploadJobDto.WindowSize;
-            double samplingRate = uploadJobDto.SamplingRate;
+            using var requestTimer = RequestProcessingDuration.NewTimer();
 
-            // Upload the files
             var fileUploadResults = await fileUploadService.UploadFiles(files);
 
-            // TODO handle multiple files at once
-            var filePath = fileUploadResults.ToList()[0].LocalPath;
+            int windowSize = uploadJobDto.WindowSize;
+            double samplingRate = uploadJobDto.SamplingRate;
+            ProcessingType processingType = uploadJobDto.ProcessingType;
+
+            switch (processingType)
+            {
+                case ProcessingType.Sequential:
+                case ProcessingType.Simd:
+                    foreach (var fileUploadResult in fileUploadResults)
+                    {
+                        await ProcessFileUploadResult(windowSize, samplingRate, processingType, fileUploadResult);
+                    }
+                    break;
+                case ProcessingType.Parallel:
+                case ProcessingType.SimdParallel:
+                    fileUploadResults.AsParallel().ForAll(async fileUploadResult =>
+                    {
+                        await ProcessFileUploadResult(windowSize, samplingRate, processingType, fileUploadResult);
+                    });
+                    break;
+                default:
+                    throw new NotSupportedException(processingType.ToString());
+            }
+
+            return Ok(fileUploadResults);
+        }
+
+        private async Task ProcessFileUploadResult(int windowSize, double samplingRate, ProcessingType processingType, FileUploadResult fileUploadResult)
+        {
+            var filePath = fileUploadResult.LocalPath;
+
+            var fftResults = await ProcessFile(filePath, processingType, windowSize, samplingRate);
+
+            SaveFFtResults(filePath, fftResults, windowSize, windowSize, samplingRate);
+        }
+
+        private async Task<List<FftResult>> ProcessFile(string filePath, ProcessingType processingType, int windowSize, double samplingRate)
+        {
             using var fs = System.IO.File.OpenRead(filePath);
 
-            using var buffIn = new BufferedStream(fs, uploadJobDto.WindowSize * sizeof(double));
+            using var buffIn = new BufferedStream(fs, windowSize * sizeof(double));
             using var binIn = new BinaryReader(buffIn);
 
             int totalSignalCount = (int)(fs.Length / sizeof(double));
@@ -51,7 +88,7 @@ namespace AR.P2.Manager.Controllers
             using var fileProcessingTimer = FileProcessingDuration.NewTimer();
 
             List<FftResult> fftResults = null;
-            switch (uploadJobDto.ProcessingType)
+            switch (processingType)
             {
                 case Models.ProcessingType.Sequential:
                     fftResults = SequentialProcessing(binIn, windowSize, signalCount, samplingRate);
@@ -66,13 +103,37 @@ namespace AR.P2.Manager.Controllers
                     fftResults = await ParallelProcessing(binIn, windowSize, signalCount, samplingRate, simd: true);
                     break;
                 default:
-                    throw new NotSupportedException(uploadJobDto.ProcessingType.ToString());
+                    throw new NotSupportedException(processingType.ToString());
             }
 
-            return Ok(fileUploadResults);
+            return fftResults;
         }
 
-        //
+        private void SaveFFtResults(
+            string filePath,
+            List<FftResult> fftResults,
+            int windowSize,
+            int signalCount,
+            double samplingRate)
+        {
+            string parentDir = Directory.GetParent(filePath).FullName;
+            string fileName = Path.GetFileNameWithoutExtension(filePath);
+            var outFilePath = Path.Join(parentDir, $"{fileName}_out.csv");
+
+            using var fs = new StreamWriter(outFilePath);
+
+            int resultCount = fftResults.Count;
+            for (int i = 0; i < resultCount; i++)
+            {
+                var fftResult = fftResults[i];
+                for (int j = 0; j < fftResult?.SpectralComponents.Count; j++)
+                {
+                    var specComp = fftResult.SpectralComponents[j];
+                    fs.WriteLine($"{specComp.Frequency},{specComp.Magnitude}");
+                }
+                fs.WriteLine($"{Environment.NewLine}");
+            }
+        }
 
         private List<FftResult> SimdProcessing(
             BinaryReader binIn,
