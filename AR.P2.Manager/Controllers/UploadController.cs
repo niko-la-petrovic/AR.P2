@@ -41,6 +41,7 @@ namespace AR.P2.Manager.Controllers
 
             int windowSize = uploadJobDto.WindowSize;
             double samplingRate = uploadJobDto.SamplingRate;
+            bool saveResults = uploadJobDto.SaveResults;
             ProcessingType processingType = uploadJobDto.ProcessingType;
 
             switch (processingType)
@@ -49,14 +50,14 @@ namespace AR.P2.Manager.Controllers
                 case ProcessingType.Simd:
                     foreach (var fileUploadResult in fileUploadResults)
                     {
-                        await ProcessFileUploadResult(windowSize, samplingRate, processingType, fileUploadResult);
+                        await ProcessFileUploadResult(windowSize, samplingRate, processingType, fileUploadResult, saveResults);
                     }
                     break;
                 case ProcessingType.Parallel:
                 case ProcessingType.SimdParallel:
                     fileUploadResults.AsParallel().ForAll(async fileUploadResult =>
                     {
-                        await ProcessFileUploadResult(windowSize, samplingRate, processingType, fileUploadResult);
+                        await ProcessFileUploadResult(windowSize, samplingRate, processingType, fileUploadResult, saveResults);
                     });
                     break;
                 default:
@@ -66,13 +67,14 @@ namespace AR.P2.Manager.Controllers
             return Ok(fileUploadResults);
         }
 
-        private async Task ProcessFileUploadResult(int windowSize, double samplingRate, ProcessingType processingType, FileUploadResult fileUploadResult)
+        private async Task ProcessFileUploadResult(int windowSize, double samplingRate, ProcessingType processingType, FileUploadResult fileUploadResult, bool saveResults)
         {
             var filePath = fileUploadResult.LocalPath;
 
             var fftResults = await ProcessFile(filePath, processingType, windowSize, samplingRate);
 
-            SaveFFtResults(filePath, fftResults, windowSize, windowSize, samplingRate);
+            if (saveResults)
+                SaveFFtResults(filePath, fftResults, windowSize, windowSize, samplingRate);
         }
 
         private async Task<List<FftResult>> ProcessFile(string filePath, ProcessingType processingType, int windowSize, double samplingRate)
