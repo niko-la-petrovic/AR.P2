@@ -18,7 +18,7 @@
     },
     "AR.P2.Manager": {
       "commandName": "Project",
-      "launchBrowser": true,
+      "launchBrowser": false,
       "launchUrl": "https://localhost:7001/swagger",
       "environmentVariables": {
         "ASPNETCORE_ENVIRONMENT": "Development",

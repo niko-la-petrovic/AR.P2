@@ -8,6 +8,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Numerics;
 using System.Threading.Tasks;
 
 namespace AR.P2.Manager.Controllers
@@ -18,6 +19,7 @@ namespace AR.P2.Manager.Controllers
     {
         // TODO think of what to od with processing results - maybe export to csv or some binary form for each subtask?
         // TODO adjust buckets for nano-millisecond range
+        // TODO add logging
         private static readonly Histogram FftDuration = Metrics.CreateHistogram("mgr_fft_duration_seconds", "Histogram of FFT durations.");
         private static readonly Histogram FileProcessingDuration = Metrics.CreateHistogram("mgr_file_processing_duration_seconds", "Histogram of file processing durations.");
 
@@ -30,17 +32,19 @@ namespace AR.P2.Manager.Controllers
             if (!files.Any())
                 return BadRequest("No files provided.");
 
-            // Upload the initial files
+            int windowSize = uploadJobDto.WindowSize;
+            double samplingRate = uploadJobDto.SamplingRate;
+
+            // Upload the files
             var fileUploadResults = await fileUploadService.UploadFiles(files);
 
+            // TODO handle multiple files at once
             var filePath = fileUploadResults.ToList()[0].LocalPath;
             using var fs = System.IO.File.OpenRead(filePath);
 
             using var buffIn = new BufferedStream(fs, uploadJobDto.WindowSize * sizeof(double));
             using var binIn = new BinaryReader(buffIn);
 
-            int windowSize = uploadJobDto.WindowSize;
-            double samplingRate = uploadJobDto.SamplingRate;
             int totalSignalCount = (int)(fs.Length / sizeof(double));
             int signalCount = totalSignalCount / windowSize * windowSize;
 
@@ -56,7 +60,7 @@ namespace AR.P2.Manager.Controllers
                     fftResults = await ParallelProcessing(binIn, windowSize, signalCount, samplingRate);
                     break;
                 case Models.ProcessingType.Simd:
-                    fftResults = SimdProcessing(uploadJobDto, binIn, windowSize, signalCount, samplingRate);
+                    fftResults = SimdProcessing(binIn, windowSize, signalCount, samplingRate);
                     break;
                 case Models.ProcessingType.SimdParallel:
                     break;
@@ -70,7 +74,6 @@ namespace AR.P2.Manager.Controllers
         //
 
         private List<FftResult> SimdProcessing(
-            UploadJobDto uploadJobDto,
             BinaryReader binIn,
             int windowSize,
             int signalCount,
@@ -87,12 +90,26 @@ namespace AR.P2.Manager.Controllers
                 }
             }
 
-            throw new NotImplementedException();
+            return fftResults;
         }
 
-        private unsafe void SimdInner(double* signalPtr, int windowSize, double samplingRate, int signalCount, object fftResults)
+        private unsafe void SimdInner(
+            double* signalPtr,
+            int windowSize,
+            double samplingRate,
+            int signalCount,
+            List<FftResult> fftResults)
         {
-            throw new NotImplementedException();
+            for (int i = 0; i + windowSize <= signalCount; i += windowSize)
+            {
+                List<Complex> complexSpecComps;
+                using (var fftDurationTimer = FftDuration.NewTimer())
+                {
+                    complexSpecComps = Operations.FftSimdRecurse(signalPtr + i, windowSize).ToList();
+                }
+                var fftResult = Operations.GetFftResult(complexSpecComps, samplingRate, windowSize);
+                fftResults.Add(fftResult);
+            }
         }
 
         public struct SubTaskInfo
@@ -206,9 +223,11 @@ namespace AR.P2.Manager.Controllers
                     int i = 0;
                     for (int k = 0; k + windowSize <= signalPartCount; k += windowSize)
                     {
-                        using var fftDurationTimer = FftDuration.NewTimer();
-
-                        var complexSpecComps = Operations.FftRecurse(signalPtr + k, windowSize);
+                        List<Complex> complexSpecComps;
+                        using (var fftDurationTimer = FftDuration.NewTimer())
+                        {
+                            complexSpecComps = Operations.FftRecurse(signalPtr + k, windowSize);
+                        }
                         var fftResult = Operations.GetFftResult(complexSpecComps, samplingRate, windowSize);
                         kvps.Add(new KeyValuePair<SubTaskInfo, FftResult>(new SubTaskInfo { TaskIndex = taskIndex, WindowIndex = i }, fftResult));
                         i++;
@@ -226,7 +245,6 @@ namespace AR.P2.Manager.Controllers
             double samplingRate)
         {
             List<FftResult> fftResults = new();
-
             var signal = ReadInSignal(binIn, signalCount);
 
             unsafe
@@ -249,9 +267,11 @@ namespace AR.P2.Manager.Controllers
         {
             for (int i = 0; i + windowSize <= signalCount; i += windowSize)
             {
-                using var fftDurationTimer = FftDuration.NewTimer();
-
-                var complexSpecComps = Operations.FftRecurse(signalPtr + i, windowSize);
+                List<Complex> complexSpecComps;
+                using (var fftDurationTimer = FftDuration.NewTimer())
+                {
+                    complexSpecComps = Operations.FftRecurse(signalPtr + i, windowSize);
+                }
                 var fftResult = Operations.GetFftResult(complexSpecComps, samplingRate, windowSize);
                 fftResults.Add(fftResult);
             }
