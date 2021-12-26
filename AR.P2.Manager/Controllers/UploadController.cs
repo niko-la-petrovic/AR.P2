@@ -63,6 +63,7 @@ namespace AR.P2.Manager.Controllers
                     fftResults = SimdProcessing(binIn, windowSize, signalCount, samplingRate);
                     break;
                 case Models.ProcessingType.SimdParallel:
+                    fftResults = await ParallelProcessing(binIn, windowSize, signalCount, samplingRate, simd: true);
                     break;
                 default:
                     throw new NotSupportedException(uploadJobDto.ProcessingType.ToString());
@@ -145,7 +146,8 @@ namespace AR.P2.Manager.Controllers
             BinaryReader binIn,
             int windowSize,
             int signalCount,
-            double samplingRate)
+            double samplingRate,
+            bool simd = false)
         {
             var cpuCount = Environment.ProcessorCount;
 
@@ -161,7 +163,7 @@ namespace AR.P2.Manager.Controllers
                 var signal = ReadInSignal(binIn, parallelTaskCount);
 
                 int taskIndex = i;
-                processingTasks[i] = Task.Factory.StartNew(() => ParallelInner(taskIndex, signal, windowSize, parallelTaskCount, samplingRate));
+                processingTasks[i] = Task.Factory.StartNew(() => ParallelInner(taskIndex, signal, windowSize, parallelTaskCount, samplingRate, simd));
             }
 
             Task.WaitAll(processingTasks);
@@ -212,7 +214,8 @@ namespace AR.P2.Manager.Controllers
             double[] signal,
             int windowSize,
             int signalPartCount,
-            double samplingRate)
+            double samplingRate,
+            bool simd = false)
         {
             var kvps = new List<KeyValuePair<SubTaskInfo, FftResult>>();
 
@@ -226,7 +229,14 @@ namespace AR.P2.Manager.Controllers
                         List<Complex> complexSpecComps;
                         using (var fftDurationTimer = FftDuration.NewTimer())
                         {
-                            complexSpecComps = Operations.FftRecurse(signalPtr + k, windowSize);
+                            if (simd)
+                            {
+                                complexSpecComps = Operations.FftSimdRecurse(signalPtr + k, windowSize).ToList();
+                            }
+                            else
+                            {
+                                complexSpecComps = Operations.FftRecurse(signalPtr + k, windowSize);
+                            }
                         }
                         var fftResult = Operations.GetFftResult(complexSpecComps, samplingRate, windowSize);
                         kvps.Add(new KeyValuePair<SubTaskInfo, FftResult>(new SubTaskInfo { TaskIndex = taskIndex, WindowIndex = i }, fftResult));

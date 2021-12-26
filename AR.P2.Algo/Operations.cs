@@ -80,7 +80,6 @@ namespace AR.P2.Algo
             List<Complex> oddSpectralComponents,
             int i)
         {
-            // TODO rename
             var cosSin = Complex.FromPolarCoordinates(1, -2 * Math.PI * i / signalLength);
             Complex oddOffsetSpectralComponent = cosSin * oddSpectralComponents[i];
 
@@ -210,7 +209,6 @@ namespace AR.P2.Algo
 
             return cos;
         }
-
 
         private static Vector128<double> Sin128(Vector128<double> x)
         {
