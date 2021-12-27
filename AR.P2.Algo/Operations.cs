@@ -152,7 +152,6 @@ namespace AR.P2.Algo
                             var constMultipliedVector = Avx.Multiply(currentIndicesVector, _negTwoPi);
                             var thetaVector = Avx.Divide(constMultipliedVector, signalLenVec);
                             // order in thetaVector: theta1, theta2
-
                             Vector128<double> cosV = Cos128(thetaVector);
                             Vector128<double> sinV = Sin128(thetaVector);
                             // store in vector as: theta1, theta2, theta1, theta2
@@ -174,12 +173,12 @@ namespace AR.P2.Algo
                             // re1, im1, re2, im2
                             var oddOffsetSpecComp = Fma.MultiplyAdd(aRe, oddSpecCompsV, aImBSwap);
 
-                            Vector256<double> evenSpecCompV = Avx.LoadVector256((double*)(evenSpecCompsPtr + i));
+                            Vector256<double> evenSpecCompsV = Avx.LoadVector256((double*)(evenSpecCompsPtr + i));
 
-                            var ithSpeCComp = Avx.Add(evenSpecCompV, oddOffsetSpecComp);
+                            var ithSpeCComp = Avx.Add(evenSpecCompsV, oddOffsetSpecComp);
                             Avx.Store((double*)(specCompsPtr + i), ithSpeCComp);
 
-                            var otherIthSpecComp = Avx.Subtract(evenSpecCompV, oddOffsetSpecComp);
+                            var otherIthSpecComp = Avx.Subtract(evenSpecCompsV, oddOffsetSpecComp);
                             Avx.Store((double*)(specCompsPtr + halfSignalLength + i), otherIthSpecComp);
                         }
                     }
