@@ -175,8 +175,8 @@ namespace AR.P2.Algo
 
                             Vector256<double> evenSpecCompsV = Avx.LoadVector256((double*)(evenSpecCompsPtr + i));
 
-                            var ithSpeCComp = Avx.Add(evenSpecCompsV, oddOffsetSpecComp);
-                            Avx.Store((double*)(specCompsPtr + i), ithSpeCComp);
+                            var ithSpecComp = Avx.Add(evenSpecCompsV, oddOffsetSpecComp);
+                            Avx.Store((double*)(specCompsPtr + i), ithSpecComp);
 
                             var otherIthSpecComp = Avx.Subtract(evenSpecCompsV, oddOffsetSpecComp);
                             Avx.Store((double*)(specCompsPtr + halfSignalLength + i), otherIthSpecComp);
