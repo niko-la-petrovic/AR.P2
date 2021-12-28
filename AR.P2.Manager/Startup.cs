@@ -32,6 +32,7 @@ namespace AR.P2.Manager
             services.AddDbServices(Configuration);
             services.AddMetrics();
             services.AddFileUploadServices(Configuration);
+            services.AddFftServices();
 
             services.AddSwaggerGen(options =>
             {

@@ -16,6 +16,13 @@ namespace AR.P2.Manager.Configuration
 {
     public static class ConfigurationExtensions
     {
+        public static IServiceCollection AddFftServices(this IServiceCollection services)
+        {
+            services.AddScoped<IFftService, FftService>();
+
+            return services;
+        }
+
         public static IServiceCollection AddDbServices(this IServiceCollection services, IConfiguration configuration)
         {
             services.AddDbContext<ApplicationDbContext>(options => options.UseSqlite(configuration.GetConnectionString("DefaultConnection")));
