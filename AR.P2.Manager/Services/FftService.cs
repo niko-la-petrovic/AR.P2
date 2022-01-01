@@ -1,6 +1,7 @@
 ﻿using AR.P2.Algo;
 using AR.P2.Manager.Models;
 using AR.P2.Manager.Utility;
+using Microsoft.Extensions.Logging;
 using Prometheus;
 using System;
 using System.Collections.Generic;
@@ -13,8 +14,21 @@ namespace AR.P2.Manager.Services
 {
     public class FftService : IFftService
     {
-        private static readonly Histogram FftDuration = Metrics.CreateHistogram("mgr_fft_duration_seconds", "Histogram of FFT durations.");
-        private static readonly Histogram FileProcessingDuration = Metrics.CreateHistogram("mgr_file_processing_duration_seconds", "Histogram of file processing durations.");
+        private static readonly Histogram FftDuration = Metrics.CreateHistogram("mgr_fft_duration_seconds", "Histogram of FFT durations.", new HistogramConfiguration
+        {
+            Buckets = new double[] { Math.Pow(10, -4), 0.001, 0.005, 0.010, 0.050, 0.1, 1, 1.5, 2.0 },
+        });
+        private static readonly Histogram FileProcessingDuration = Metrics.CreateHistogram("mgr_file_processing_duration_seconds", "Histogram of file processing durations.", new HistogramConfiguration
+        {
+            Buckets = new double[] { 0.005, 0.010, 0.050, 0.1, 0.5, 1, 2, 5, 7, 10, 15 },
+        });
+
+        private readonly ILogger _logger;
+
+        public FftService(ILogger<FftService> logger)
+        {
+            _logger = logger;
+        }
 
         public async Task ProcessFileUploadResults(
             IEnumerable<FileUploadResult> fileUploadResults,
@@ -25,21 +39,20 @@ namespace AR.P2.Manager.Services
         {
             switch (processingType)
             {
-                case ProcessingType.Sequential:
-                case ProcessingType.Simd:
+                case ProcessingType.Sequential or ProcessingType.Simd:
                     foreach (var fileUploadResult in fileUploadResults)
                     {
                         await ProcessFileUploadResult(windowSize, samplingRate, processingType, fileUploadResult, saveResults);
                     }
                     break;
-                case ProcessingType.Parallel:
-                case ProcessingType.SimdParallel:
+                case ProcessingType.Parallel or ProcessingType.SimdParallel:
                     fileUploadResults.AsParallel().ForAll(async fileUploadResult =>
                     {
                         await ProcessFileUploadResult(windowSize, samplingRate, processingType, fileUploadResult, saveResults);
                     });
                     break;
                 default:
+                    _logger.LogDebug($"Unsupported processing type '{processingType}'.");
                     throw new NotSupportedException(processingType.ToString());
             }
         }
@@ -48,8 +61,11 @@ namespace AR.P2.Manager.Services
         {
             var filePath = fileUploadResult.LocalPath;
 
+            _logger?.LogInformation($"Processing '{fileUploadResult.LocalPath}'.");
+
             var fftResults = await ProcessFile(filePath, processingType, windowSize, samplingRate);
 
+            _logger?.LogInformation($"Finished processing '{fileUploadResult.LocalPath}'.");
             if (saveResults)
                 SaveFFtResults(filePath, fftResults);
         }
@@ -64,18 +80,19 @@ namespace AR.P2.Manager.Services
             int totalSignalCount = (int)(fs.Length / sizeof(double));
             int signalCount = totalSignalCount / windowSize * windowSize;
 
-            using var fileProcessingTimer = FileProcessingDuration.NewTimer();
-
-            List<FftResult> fftResults = null;
-            fftResults = processingType switch
+            using (var fileProcessingTimer = FileProcessingDuration.NewTimer())
             {
-                ProcessingType.Sequential => SequentialProcessing(binIn, windowSize, signalCount, samplingRate),
-                ProcessingType.Parallel => await ParallelProcessing(binIn, windowSize, signalCount, samplingRate),
-                ProcessingType.Simd => SimdProcessing(binIn, windowSize, signalCount, samplingRate),
-                ProcessingType.SimdParallel => await ParallelProcessing(binIn, windowSize, signalCount, samplingRate, simd: true),
-                _ => throw new NotSupportedException(processingType.ToString()),
-            };
-            return fftResults;
+                List<FftResult> fftResults = null;
+                fftResults = processingType switch
+                {
+                    ProcessingType.Sequential => SequentialProcessing(binIn, windowSize, signalCount, samplingRate),
+                    ProcessingType.Parallel => await ParallelProcessing(binIn, windowSize, signalCount, samplingRate),
+                    ProcessingType.Simd => SimdProcessing(binIn, windowSize, signalCount, samplingRate),
+                    ProcessingType.SimdParallel => await ParallelProcessing(binIn, windowSize, signalCount, samplingRate, simd: true),
+                    _ => throw new NotSupportedException(processingType.ToString()),
+                };
+                return fftResults;
+            }
         }
 
         private static void SaveFFtResults(
@@ -224,19 +241,21 @@ namespace AR.P2.Manager.Services
                     int i = 0;
                     for (int k = 0; k + windowSize <= signalPartCount; k += windowSize)
                     {
-                        List<Complex> complexSpecComps;
+                        FftResult fftResult;
                         using (var fftDurationTimer = FftDuration.NewTimer())
                         {
                             if (simd)
                             {
-                                complexSpecComps = Operations.FftSimdRecurse(signalPtr + k, windowSize).ToList();
+                                var complexSpecComps = Operations.FftSimdRecurse(signalPtr + k, windowSize);
+                                fftResult = Operations.GetFftResult(complexSpecComps, samplingRate, windowSize);
                             }
                             else
                             {
-                                complexSpecComps = Operations.FftRecurse(signalPtr + k, windowSize);
+                                var complexSpecComps = Operations.FftRecurse(signalPtr + k, windowSize);
+                                fftResult = Operations.GetFftResult(complexSpecComps, samplingRate, windowSize);
                             }
                         }
-                        var fftResult = Operations.GetFftResult(complexSpecComps, samplingRate, windowSize);
+                        
                         kvps.Add(new KeyValuePair<SubTaskInfo, FftResult>(new SubTaskInfo { TaskIndex = taskIndex, WindowIndex = i }, fftResult));
                         i++;
                     }

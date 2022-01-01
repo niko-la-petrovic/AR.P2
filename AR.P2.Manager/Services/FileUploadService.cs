@@ -3,6 +3,7 @@ using AR.P2.Manager.Data;
 using AR.P2.Manager.Models;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
+using Microsoft.Extensions.Logging;
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -16,14 +17,17 @@ namespace AR.P2.Manager.Services
         private readonly ApplicationDbContext _dbContext;
         private readonly FileUploadSettings _fileUploadSettings;
         private readonly string _webRootPath;
+        private readonly ILogger _logger;
 
         public FileUploadService(
             ApplicationDbContext dbContext,
             FileUploadSettings fileUploadSettings,
-            IWebHostEnvironment env)
+            IWebHostEnvironment env,
+            ILogger<FileUploadService> logger)
         {
             _dbContext = dbContext;
             _fileUploadSettings = fileUploadSettings;
+            _logger = logger;
             _webRootPath = env.WebRootPath;
         }
 
@@ -38,9 +42,12 @@ namespace AR.P2.Manager.Services
         {
             string destinationFileName = GetSanitizedFileName(formFile.FileName);
             string destinationFilePath = GetDestinationFilePath(destinationFileName);
-            using var destStream = File.OpenWrite(destinationFilePath);
-
-            await formFile.CopyToAsync(destStream);
+            using (var destStream = File.OpenWrite(destinationFilePath))
+            {
+                _logger?.LogInformation($"Downloading '{formFile.FileName}' as '{destinationFileName}'.");
+                
+                await formFile.CopyToAsync(destStream);
+            }
 
             string requestPath = string.Join("/", _fileUploadSettings.FileUploadRequestPath, destinationFileName);
 

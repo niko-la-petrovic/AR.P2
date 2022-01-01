@@ -264,6 +264,30 @@ namespace AR.P2.Algo
             };
         }
 
+        public unsafe static FftResult GetFftResult(Complex[] complexSpecComps, double samplingRate, int windowSize)
+        {
+            if (!IsPowerTwo(windowSize))
+                throw new InvalidOperationException("Window size must be a power of 2.");
+
+            var specComps = new List<SpectralComponent>(new SpectralComponent[complexSpecComps.Length]);
+
+            for (int i = 0; i < complexSpecComps.Length; i++)
+            {
+                specComps[i] = new SpectralComponent
+                {
+                    Frequency = i * samplingRate / windowSize,
+                    Magnitude = complexSpecComps[i].Magnitude
+                };
+            }
+
+            return new FftResult
+            {
+                SamplingRate = samplingRate,
+                WindowSize = windowSize,
+                SpectralComponents = specComps
+            };
+        }
+
         public SpectralComponent GetMaxComponent(IEnumerable<SpectralComponent> spectralComponents)
         {
             return spectralComponents.Max();

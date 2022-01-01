@@ -19,6 +19,7 @@ services:
       context: .
       dockerfile: ./AR.P2.Manager/Dockerfile
     container_name: manager
+    restart: unless-stopped
     volumes:
     - arp2_data:/data
     <<: *common
