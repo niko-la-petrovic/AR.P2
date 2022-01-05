@@ -242,20 +242,20 @@ namespace AR.P2.Manager.Services
                     for (int k = 0; k + windowSize <= signalPartCount; k += windowSize)
                     {
                         FftResult fftResult;
+                        List<Complex> complexSpecCompsList = null;
+                        Complex[] complexSpecCompsArr = null;
                         using (var fftDurationTimer = FftDuration.NewTimer())
                         {
                             if (simd)
-                            {
-                                var complexSpecComps = Operations.FftSimdRecurse(signalPtr + k, windowSize);
-                                fftResult = Operations.GetFftResult(complexSpecComps, samplingRate, windowSize);
-                            }
+                                complexSpecCompsArr = Operations.FftSimdRecurse(signalPtr + k, windowSize);
                             else
-                            {
-                                var complexSpecComps = Operations.FftRecurse(signalPtr + k, windowSize);
-                                fftResult = Operations.GetFftResult(complexSpecComps, samplingRate, windowSize);
-                            }
+                                complexSpecCompsList = Operations.FftRecurse(signalPtr + k, windowSize);
                         }
-                        
+                        if (simd)
+                            fftResult = Operations.GetFftResult(complexSpecCompsArr, samplingRate, windowSize);
+                        else
+                            fftResult = Operations.GetFftResult(complexSpecCompsList, samplingRate, windowSize);
+
                         kvps.Add(new KeyValuePair<SubTaskInfo, FftResult>(new SubTaskInfo { TaskIndex = taskIndex, WindowIndex = i }, fftResult));
                         i++;
                     }
