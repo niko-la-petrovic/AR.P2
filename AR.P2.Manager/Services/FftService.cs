@@ -70,7 +70,7 @@ namespace AR.P2.Manager.Services
                 SaveFFtResults(filePath, fftResults);
         }
 
-        private async Task<List<FftResult>> ProcessFile(string filePath, ProcessingType processingType, int windowSize, double samplingRate)
+        public async Task<List<FftResult>> ProcessFile(string filePath, ProcessingType processingType, int windowSize, double samplingRate)
         {
             using var fs = File.OpenRead(filePath);
 
@@ -207,7 +207,7 @@ namespace AR.P2.Manager.Services
                 }
             }
 
-            var result = dict.Values.Concat(seqResults).ToList();
+            var result = dict.Values.ToList().Concat(seqResults).ToList();
 
             return Task.FromResult(result);
         }
@@ -224,7 +224,7 @@ namespace AR.P2.Manager.Services
             return signal;
         }
 
-        private static List<KeyValuePair<SubTaskInfo, FftResult>> ParallelInner(
+        public static List<KeyValuePair<SubTaskInfo, FftResult>> ParallelInner(
             int taskIndex,
             double[] signal,
             int windowSize,
@@ -285,7 +285,7 @@ namespace AR.P2.Manager.Services
             return fftResults;
         }
 
-        private static unsafe void SequentialInner(
+        public static unsafe void SequentialInner(
             double* signalPtr,
             int windowSize,
             double samplingRate,

@@ -8,7 +8,7 @@ using System.Runtime.Intrinsics.X86;
 
 namespace AR.P2.Algo
 {
-    public class Operations
+    public partial class Operations
     {
         public unsafe static List<Complex> Fft(double[] signal)
         {
@@ -99,6 +99,16 @@ namespace AR.P2.Algo
             return y;
         }
 
+        public static double AprxCos(double x)
+        {
+            var comparisonResult = x > Math.PI / 2.0 ? 1 : 0;
+            var comparisonResultToDouble = (double)comparisonResult;
+            var modified = x + comparisonResultToDouble * -Math.PI;
+            var aprxSin = AprxSin(modified + Math.PI / 2.0);
+
+            return aprxSin + comparisonResult * -2 * aprxSin;
+        }
+
         private static readonly Vector128<double> _negTwoPi = new Vector<double>(-2 * Math.PI).AsVector128();
         private static readonly double[] _indexIndices = new double[4] { 0, 1, 0, 1 };
         private static readonly Vector128<double> _indicesVector = new Vector<double>(_indexIndices).AsVector128();
@@ -146,7 +156,7 @@ namespace AR.P2.Algo
                         var signalLenVec = new Vector<double>(signalLength).AsVector128();
                         for (i = 0; i + 2 <= halfSignalLength; i += 2)
                         {
-                            var iVector = new Vector<double>(i).AsVector128();
+                            var iVector = Vector128.Create((double)i);
 
                             var currentIndicesVector = Avx.Add(iVector, _indicesVector);
                             var constMultipliedVector = Avx.Multiply(currentIndicesVector, _negTwoPi);
@@ -161,6 +171,9 @@ namespace AR.P2.Algo
                                 Avx.Store(cosSinArrPtr, cosV);
                                 Avx.Store(cosSinArrPtr + 2, sinV);
                                 cosSinV = Avx.LoadVector256(cosSinArrPtr);
+                                var inLaneShuffled = Avx.Shuffle(cosSinV, cosSinV, 5);
+                                var lanePermuted = Avx.Permute2x128(inLaneShuffled, inLaneShuffled, 1);
+                                cosSinV = Avx.Blend(cosSinV, lanePermuted, 6);
                             }
 
                             // oddSpecComps[i..i+1] * cossSinV : complex
@@ -171,7 +184,9 @@ namespace AR.P2.Algo
                             var aRe = Avx.Shuffle(cosSinV, cosSinV, 0);
                             var aImBSwap = Avx.Multiply(aIm, bSwap);
                             // re1, im1, re2, im2
-                            var oddOffsetSpecComp = Fma.MultiplyAdd(aRe, oddSpecCompsV, aImBSwap);
+                            var oddOffsetSpecComp = Fma.MultiplyAddSubtract(aRe, oddSpecCompsV, aImBSwap);
+
+                            // Adjust output spectral components
 
                             Vector256<double> evenSpecCompsV = Avx.LoadVector256((double*)(evenSpecCompsPtr + i));
 
@@ -195,21 +210,35 @@ namespace AR.P2.Algo
             return spectralComponents;
         }
 
-        private static readonly Vector128<double> _fourDivPi = new Vector<double>(4.0 / Math.PI).AsVector128();
+        private static readonly Vector128<double> _pi = new Vector<double>(Math.PI).AsVector128();
+        private static readonly Vector128<double> _negPi = new Vector<double>(-Math.PI).AsVector128();
+        private static readonly Vector128<double> _two = new Vector<double>(2.0).AsVector128();
+        private static readonly Vector128<double> _negTwo = new Vector<double>(-2.0).AsVector128();
+        private static readonly Vector128<double> _fourDivPi = new Vector<double>(4.0 / Math.PI /*+ 0.000000000001*/).AsVector128();
         private static readonly Vector128<double> _negFourDivPiSq = new Vector<double>(-4.0 / (Math.PI * Math.PI)).AsVector128();
         private static readonly Vector128<double> _piHalf = new Vector<double>(Math.PI / 2).AsVector128();
         private static readonly Vector128<double> _p = new Vector<double>(0.225).AsVector128();
         private static readonly Vector128<double> _positiveSignMask = new Vector<long>(0x7fffffffffffffff).AsVector128().AsDouble();
 
-        private static Vector128<double> Cos128(Vector128<double> x)
+        public static Vector128<double> Cos128(Vector128<double> x)
         {
-            var xAddPiHalf = Avx.Add(x, _piHalf);
-            var cos = Sin128(xAddPiHalf);
+            var negComparisonResult = Avx.CompareGreaterThan(x, _piHalf);
+
+            var negComparisonResultDouble = Avx.ConvertToVector128Double(negComparisonResult.AsInt32());
+            var comparisonMultiplier = Avx.Multiply(negComparisonResultDouble, _pi);
+            var modified = Avx.Add(x, comparisonMultiplier);
+
+            var xAddPiHalf = Avx.Add(modified, _piHalf);
+            var sin = Sin128(xAddPiHalf);
+
+            var negTwoComparison = Avx.Multiply(negComparisonResultDouble, _two);
+            var negTwoSin = Avx.Multiply(negTwoComparison, sin);
+            var cos = Avx.Add(sin, negTwoSin);
 
             return cos;
         }
 
-        private static Vector128<double> Sin128(Vector128<double> x)
+        public static Vector128<double> Sin128(Vector128<double> x)
         {
             var bTimesX = Avx.Multiply(x, _fourDivPi);
 
@@ -232,7 +261,7 @@ namespace AR.P2.Algo
         /// </summary>
         /// <param name="x"></param>
         /// <returns></returns>
-        private static Vector128<double> Abs(Vector128<double> x)
+        public static Vector128<double> Abs(Vector128<double> x)
         {
             // The first bit in a float and double is the sign bit.If set to 0, the result will be the absolute value.
             var abs = Avx.And(x, _positiveSignMask);
