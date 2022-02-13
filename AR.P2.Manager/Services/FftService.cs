@@ -95,7 +95,7 @@ namespace AR.P2.Manager.Services
             }
         }
 
-        private static void SaveFFtResults(
+        public static void SaveFFtResults(
             string filePath,
             List<FftResult> fftResults)
         {
@@ -147,12 +147,12 @@ namespace AR.P2.Manager.Services
         {
             for (int i = 0; i + windowSize <= signalCount; i += windowSize)
             {
-                List<Complex> complexSpecComps;
+                Complex[] complexSpecCompsArr = null;
                 using (var fftDurationTimer = FftDuration.NewTimer())
                 {
-                    complexSpecComps = Operations.FftSimdRecurse(signalPtr + i, windowSize).ToList();
+                    complexSpecCompsArr = Operations.FftSimdRecurse(signalPtr + i, windowSize);
                 }
-                var fftResult = Operations.GetFftResult(complexSpecComps, samplingRate, windowSize);
+                var fftResult = Operations.GetFftResult(complexSpecCompsArr, samplingRate, windowSize);
                 fftResults.Add(fftResult);
             }
         }
@@ -178,7 +178,31 @@ namespace AR.P2.Manager.Services
                 var signal = ReadInSignal(binIn, parallelTaskCount);
 
                 int taskIndex = i;
-                processingTasks[i] = Task.Factory.StartNew(() => ParallelInner(taskIndex, signal, windowSize, parallelTaskCount, samplingRate, simd));
+                processingTasks[i] = Task.Factory.StartNew((o) =>
+                {
+                    var signal = (double[])o;
+                    var list = new List<KeyValuePair<SubTaskInfo, FftResult>>();
+                    var resultList = new List<FftResult>();
+                    unsafe
+                    {
+                        fixed (double* signalPtr = signal)
+                        {
+                            if (!simd)
+                                SequentialInner(signalPtr, windowSize, samplingRate, parallelTaskCount, resultList);
+                            else
+                            {
+                                SimdInner(signalPtr, windowSize, samplingRate, parallelTaskCount, resultList);
+                            }
+                        }
+                    }
+
+                    for (int i = 0; i < resultList.Count; i++)
+                    {
+                        list.Add(new KeyValuePair<SubTaskInfo, FftResult>(new SubTaskInfo { TaskIndex = taskIndex, WindowIndex = i }, resultList[i]));
+                    }
+
+                    return list;
+                }, signal);
             }
 
             Task.WaitAll(processingTasks);
@@ -207,7 +231,9 @@ namespace AR.P2.Manager.Services
                 }
             }
 
-            var result = dict.Values.ToList().Concat(seqResults).ToList();
+            var result = dict.Values
+                .Concat(seqResults)
+                .ToList();
 
             return Task.FromResult(result);
         }
@@ -222,47 +248,6 @@ namespace AR.P2.Manager.Services
             }
 
             return signal;
-        }
-
-        public static List<KeyValuePair<SubTaskInfo, FftResult>> ParallelInner(
-            int taskIndex,
-            double[] signal,
-            int windowSize,
-            int signalPartCount,
-            double samplingRate,
-            bool simd = false)
-        {
-            var kvps = new List<KeyValuePair<SubTaskInfo, FftResult>>();
-
-            unsafe
-            {
-                fixed (double* signalPtr = signal)
-                {
-                    int i = 0;
-                    for (int k = 0; k + windowSize <= signalPartCount; k += windowSize)
-                    {
-                        FftResult fftResult;
-                        List<Complex> complexSpecCompsList = null;
-                        Complex[] complexSpecCompsArr = null;
-                        using (var fftDurationTimer = FftDuration.NewTimer())
-                        {
-                            if (simd)
-                                complexSpecCompsArr = Operations.FftSimdRecurse(signalPtr + k, windowSize);
-                            else
-                                complexSpecCompsList = Operations.FftRecurse(signalPtr + k, windowSize);
-                        }
-                        if (simd)
-                            fftResult = Operations.GetFftResult(complexSpecCompsArr, samplingRate, windowSize);
-                        else
-                            fftResult = Operations.GetFftResult(complexSpecCompsList, samplingRate, windowSize);
-
-                        kvps.Add(new KeyValuePair<SubTaskInfo, FftResult>(new SubTaskInfo { TaskIndex = taskIndex, WindowIndex = i }, fftResult));
-                        i++;
-                    }
-                }
-            }
-
-            return kvps;
         }
 
         private static List<FftResult> SequentialProcessing(

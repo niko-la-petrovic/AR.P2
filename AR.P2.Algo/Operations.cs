@@ -112,7 +112,6 @@ namespace AR.P2.Algo
         private static readonly Vector128<double> _negTwoPi = new Vector<double>(-2 * Math.PI).AsVector128();
         private static readonly double[] _indexIndices = new double[4] { 0, 1, 0, 1 };
         private static readonly Vector128<double> _indicesVector = new Vector<double>(_indexIndices).AsVector128();
-        private static readonly double[] cosSinArray = new double[4];
 
         public static unsafe Complex[] FftSimdRecurse(double* signal, int signalLength)
         {
@@ -153,7 +152,8 @@ namespace AR.P2.Algo
                 {
                     fixed (Complex* oddSpecCompsPtr = oddSpectralComponents)
                     {
-                        var signalLenVec = new Vector<double>(signalLength).AsVector128();
+                        var signalLenVec = Vector128.Create((double)signalLength);
+                        Span<double> cosSinArray = stackalloc double[4];
                         for (i = 0; i + 2 <= halfSignalLength; i += 2)
                         {
                             var iVector = Vector128.Create((double)i);
@@ -162,7 +162,7 @@ namespace AR.P2.Algo
                             var constMultipliedVector = Avx.Multiply(currentIndicesVector, _negTwoPi);
                             var thetaVector = Avx.Divide(constMultipliedVector, signalLenVec);
                             // order in thetaVector: theta1, theta2
-                            Vector128<double> cosV = Cos128(thetaVector);
+                            Vector128<double> cosV = LessAccurateCos128(thetaVector);
                             Vector128<double> sinV = Sin128(thetaVector);
                             // store in vector as: theta1, theta2, theta1, theta2
                             Vector256<double> cosSinV;
@@ -171,9 +171,10 @@ namespace AR.P2.Algo
                                 Avx.Store(cosSinArrPtr, cosV);
                                 Avx.Store(cosSinArrPtr + 2, sinV);
                                 cosSinV = Avx.LoadVector256(cosSinArrPtr);
-                                var inLaneShuffled = Avx.Shuffle(cosSinV, cosSinV, 5);
-                                var lanePermuted = Avx.Permute2x128(inLaneShuffled, inLaneShuffled, 1);
-                                cosSinV = Avx.Blend(cosSinV, lanePermuted, 6);
+                                cosSinV = Avx2.Permute4x64(cosSinV, 216);
+                                //var inLaneShuffled = Avx.Shuffle(cosSinV, cosSinV, 5);
+                                //var lanePermuted = Avx.Permute2x128(inLaneShuffled, inLaneShuffled, 1);
+                                //cosSinV = Avx.Blend(cosSinV, lanePermuted, 6);
                             }
 
                             // oddSpecComps[i..i+1] * cossSinV : complex
@@ -219,6 +220,14 @@ namespace AR.P2.Algo
         private static readonly Vector128<double> _piHalf = new Vector<double>(Math.PI / 2).AsVector128();
         private static readonly Vector128<double> _p = new Vector<double>(0.225).AsVector128();
         private static readonly Vector128<double> _positiveSignMask = new Vector<long>(0x7fffffffffffffff).AsVector128().AsDouble();
+
+        public static Vector128<double> LessAccurateCos128(Vector128<double> x)
+        {
+            var xAddPiHalf = Avx.Add(x, _piHalf);
+            var cos = Sin128(xAddPiHalf);
+
+            return cos;
+        }
 
         public static Vector128<double> Cos128(Vector128<double> x)
         {

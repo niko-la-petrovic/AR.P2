@@ -60,6 +60,9 @@ namespace AR.P2.Test
             var results = fftService.ProcessFile(InputFilePath, processingType, WindowSize, SamplingRate)
                 .GetAwaiter().GetResult();
 
+            // TODO remove
+            FftService.SaveFFtResults(InputFilePath, results);
+
             results.TestFftResults(MaxRelativeError, Frequency, out var usefulFftResults, out var relativeErrors, out var allWithinMargin);
             LogRelativeErrors(relativeErrors, processingType);
 
@@ -74,6 +77,9 @@ namespace AR.P2.Test
 
             var results = fftService.ProcessFile(InputFilePath, processingType, WindowSize, SamplingRate)
                 .GetAwaiter().GetResult();
+
+            // TODO remove
+            FftService.SaveFFtResults(InputFilePath, results);
 
             results.TestFftResults(MaxRelativeError, Frequency, out var usefulFftResults, out var relativeErrors, out var allWithinMargin);
             LogRelativeErrors(relativeErrors, processingType);
@@ -90,6 +96,9 @@ namespace AR.P2.Test
             var results = fftService.ProcessFile(InputFilePath, processingType, WindowSize, SamplingRate)
                 .GetAwaiter().GetResult();
 
+            // TODO remove
+            FftService.SaveFFtResults(InputFilePath, results);
+
             results.TestFftResults(MaxRelativeError, Frequency, out var usefulFftResults, out var relativeErrors, out var allWithinMargin);
             LogRelativeErrors(relativeErrors, processingType);
 
@@ -104,6 +113,9 @@ namespace AR.P2.Test
 
             var results = fftService.ProcessFile(InputFilePath, processingType, WindowSize, SamplingRate)
                 .GetAwaiter().GetResult();
+
+            // TODO remove
+            FftService.SaveFFtResults(InputFilePath, results);
 
             results.TestFftResults(MaxRelativeError, Frequency, out var usefulFftResults, out var relativeErrors, out var allWithinMargin);
             LogRelativeErrors(relativeErrors, processingType);
