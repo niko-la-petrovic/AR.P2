@@ -8,7 +8,9 @@ volumes:
   arp2_data:
     external: true
   prometheus_data:
+    external: true
   grafana_data:
+    external: true
 
 networks:
   prometheus:
